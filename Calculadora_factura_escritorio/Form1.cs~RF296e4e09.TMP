@@ -1,0 +1,344 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.OleDb;
+using System.Diagnostics;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Calculadora_factura_escritorio.Conexiones;
+using Calculadora_factura_escritorio.Consultas;
+using Calculadora_factura_escritorio.Entidades;
+using Microsoft.Office.Interop.Excel;
+using Newtonsoft.Json;
+using Calculadora_factura_escritorio.Acciones;
+//using Application = Microsoft.Office.Interop.Excel.Application;
+
+namespace Calculadora_factura_escritorio
+{
+    public partial class Form1 : Form
+    {
+        private Data data;
+        List<Factura> listxls;
+        List<DetallesCargos> listDetallesCargos;
+        public Form1()
+        {
+            InitializeComponent();
+            mostrarValores();
+            data = new Data();
+
+            //Importar_btn.Enabled = true;
+        }
+
+        public void activarForm()
+        {
+            txtGastosC.Enabled = true;
+            txtImp.Enabled = true;
+            txtIva.Enabled = true;
+            txtOtro.Enabled = true;
+            btnCalcular.Enabled = true;
+        }
+
+        private void mostrarValores()
+        {
+            string[] row = new string[] { "Gasto Celular", "0", "0", "0" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "IVA 19%", "0", "0", "0" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Imp. Consumo 4%", "0", "0", "0" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Reposición", "0", "", "" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Otros Servicios y Créditos", "0", "", "" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Ajuste x Rev de pagos", "0", "", "" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "IVA nuevos equipos", "0", "", "" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Otros Factura", "", "0", "" };
+            cuadroGrid.Rows.Add(row);
+            row = new string[] { "Total", "0", "0", "0" };
+            cuadroGrid.Rows.Add(row);
+        }
+        
+        private bool cargarValoresCuadro2(CuadroTotal dt)
+        {
+            try
+            {
+                GridViewObj.objCell(cuadroGrid, 0, 1).Value = dt.GastoCelular.ToString();
+                GridViewObj.objCell(cuadroGrid, 1, 1).Value = dt.iva.ToString();
+                GridViewObj.objCell(cuadroGrid, 2, 1).Value = dt.imp.ToString();
+                GridViewObj.objCell(cuadroGrid, 8, 1).Value = (dt.GastoCelular + dt.imp + dt.iva).ToString();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void txtGastosC_Click_1(object sender, EventArgs e)
+        {
+            if (txtGastosC.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtGastosC.Text = "";
+                txtGastosC.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtIva_Click(object sender, EventArgs e)
+        {
+            if (txtIva.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtIva.Text = "";
+                txtIva.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtImp_Click(object sender, EventArgs e)
+        {
+            if (txtImp.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtImp.Text = "";
+                txtImp.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtGastosC_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblalertGS.Visible = !double.TryParse(txtGastosC.Text, out double n) ? true : false;
+            cuadroGrid.Rows[0].Cells[2].Value = n.ToString();
+
+        }
+
+        private void txtIva_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblAlertIva.Visible = !double.TryParse(txtIva.Text, out double n) ? true : false;
+            cuadroGrid.Rows[1].Cells[2].Value = n.ToString();
+
+        }
+
+        private void txtImp_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblAlertImp.Visible = !double.TryParse(txtImp.Text, out double n) ? true : false;
+            cuadroGrid.Rows[2].Cells[2].Value = n.ToString();
+        }
+
+        private void btnCalcular_Click(object sender, EventArgs e)
+        {
+            GridViewObj.objCell(cuadroGrid, 8, 2).Value = Math.Round(double.Parse(txtGastosC.Text) + double.Parse(txtIva.Text) + double.Parse(txtImp.Text) + double.Parse(txtOtro.Text), 2);
+            Diferencias.calcularDiferencias(cuadroGrid, new string[] {txtGastosC.Text, txtIva.Text, txtImp.Text});
+            txtResumen.Text = data.resumen(GridViewObj.objCell(cuadroGrid, 8, 3).Value.ToString());
+
+        }
+
+        private void styleCells(Workbook libro)
+        {
+            Func<string, Range> range = (r) => libro.Sheets[1].Range(r);
+            range("A1").Interior.ColorIndex = 14;
+            range("B1").Interior.ColorIndex = 14;
+            range("C1").Interior.ColorIndex = 47;
+            range("D1").Interior.ColorIndex = 53;
+            range("A1:D9").Borders.LineStyle = XlLineStyle.xlDouble;
+            range("A1:D9").HorizontalAlignment = XlHAlign.xlHAlignCenter;
+            range("A1:D15").Font.Size = 12;
+            range("A1:D1").Font.Bold = true;
+            range("A1:A9").Font.Bold = true;
+            range("A1").ColumnWidth = 50;
+            range("B1:D9").ColumnWidth = 25;
+            range("A11:D15").MergeCells = true;
+            range("A11:D15").Font.Bold = true;
+            range("A11:D15").WrapText = true;
+            range("A11:D15").Borders.LineStyle = XlLineStyle.xlContinuous;
+        }
+
+        private void exportalExcel(DataGridView tb)
+        {
+            //Se crea la instancia de aplicacion excel
+            Microsoft.Office.Interop.Excel.Application excel = new Microsoft.Office.Interop.Excel.Application();
+            //Se agrega una hoja al excel
+            Workbook libro = excel.Workbooks.Add(true);
+
+            for (int i = 0; i < tb.Columns.Count; i++)
+                libro.Sheets[1].Cells[1, i + 1] = tb.Columns[i].HeaderText;
+
+
+            for (int f = 0; f < tb.Rows.Count; f++)
+                for (int c = 0; c < tb.Columns.Count; c++)
+                    libro.Sheets[1].Cells[f + 2, c + 1] = tb.Rows[f].Cells[c].Value;
+
+            libro.Sheets[1].Cells[11, 1] = txtResumen.Text;
+            styleCells(libro);
+
+            excel.Visible = true;
+
+        }
+
+        private void Importar_btn_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog()
+            {
+                Filter = "Excel | *.xls;*.xlsx;",
+                Title = "Seleccionar Archivo"
+            };
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                Data data = new Data();
+
+                txtFileName.Text = dialog.FileName;
+                string query = "SELECT MAESTRA AS maestra," +
+                    " CUSTCODE AS custcode," +
+                    " MIN AS numero, " +
+                    " NOMBRE AS nombre," +
+                    " DESCRIPCION AS descripcion," +
+                    " VALOR AS valor," +
+                    " IVA AS iva," +
+                    " CICLO AS ciclo " +
+                    " FROM [factura$] WHERE maestra <> ''";
+                DataTableCollection detallesCargosnums = data.ImportDataView(dialog.FileName, query);
+                string JSONString = string.Empty;
+                JSONString = JsonConvert.SerializeObject(detallesCargosnums[0]);
+
+                this.listxls = JsonConvert.DeserializeObject<List<Factura>>(JSONString);
+
+                this.listDetallesCargos = listxls.GroupBy(x => x.numero).OrderByDescending(x => x.Key).Select(x => new DetallesCargos
+                {
+                    numero_tel = x.First().numero.Split('.')[0],
+                    valor = Math.Round(x.Sum(v => v.valor), 2),
+                    impuesto = Math.Round(x.Sum(i => i.iva), 2),
+                    total = Math.Round(x.Sum(t => t.valor) + x.Sum(t => t.iva), 2)
+
+                }).ToList<DetallesCargos>();
+
+                facturasGrid.DataSource = this.listDetallesCargos;
+
+                CuadroTotal listDetallesFactura = this.listxls
+                    .Select(x => new CuadroTotal
+                    {
+                        GastoCelular = Math.Round((from v in listxls select v.valor).Sum(), 2),
+                        iva = Math.Round((from v in listxls select Math.Round(v.valor * 0.19, 2)).Sum(), 2), //
+                        imp = Math.Round((from v in listxls select Math.Round(v.valor * 0.19, 2) == v.iva ? 0 : Math.Round(v.valor * 0.04, 2)).Sum(), 2),//
+                        reposicion = 0,
+                        otros_serv = 0,
+                        ajus_rev_pag = 0,
+                        iva_nue_equipos = 0
+                    }).FirstOrDefault();
+
+
+                if (cargarValoresCuadro2(listDetallesFactura))
+                {
+                    activarForm();
+
+                }
+
+            }
+        }
+
+        private void btnExportar_Click(object sender, EventArgs e)
+        {
+            exportalExcel(cuadroGrid);
+        }
+
+        private void facturasGrid_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            string numero_tel = GridViewObj.objCell(facturasGrid, e.RowIndex, 0).Value.ToString();
+
+            var listDetallesFactura = listxls.Where(x => x.numero.Split('.')[0].Equals(numero_tel)).Select(x => new FacturaDetalles
+            {
+                numero = x.numero,
+                nombre = x.nombre,
+                descripcion = x.descripcion,
+                iva = Math.Round(x.valor * 0.19, 2),
+                imp = Math.Round(x.valor * 0.19, 2) == x.iva ? 0 : Math.Round(x.valor * 0.04, 2),
+                valor = x.valor,
+                total = 0
+
+            }).ToList<FacturaDetalles>();
+            var totalCalculos = listDetallesFactura.Select(x => new FacturaDetalles
+            {
+                numero = x.numero.Split('.')[0],
+                nombre = x.nombre,
+                descripcion = x.descripcion,
+                iva = x.iva,
+                imp = x.imp,
+                valor = x.valor,
+                total = Math.Round(x.valor + x.iva + x.imp, 2)
+            }).ToList<FacturaDetalles>();
+
+            var numDetalles = this.listDetallesCargos.Where(x => x.numero_tel.Equals(numero_tel)).FirstOrDefault();
+
+            txt_numCel.Text = numDetalles.numero_tel;
+            txtValorFac.Text = numDetalles.valor.ToString();
+            txtIvaFac.Text = totalCalculos.Sum(x => x.iva).ToString();
+            txtImpFac.Text = totalCalculos.Sum(x => x.imp).ToString();
+            txtTotalFac.Text = numDetalles.total.ToString();
+
+
+            facturaDetallesGrid.DataSource = totalCalculos.Where(x => x.valor > -1).ToList<FacturaDetalles>();
+            facturaDetallesDescuentos.DataSource = totalCalculos.Where(x => x.valor < 0).ToList<FacturaDetalles>();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnBuscarNum_Click(object sender, EventArgs e)
+        {
+            string numero_tel = txt_numCel.Text;
+
+            var listDetallesFactura = listxls.Where(x => x.numero.Split('.')[0].Equals(numero_tel)).Select(x => new FacturaDetalles
+            {
+                numero = x.numero.Split('.')[0],
+                nombre = x.nombre,
+                descripcion = x.descripcion,
+                iva = Math.Round(x.valor * 0.19, 2),
+                imp = Math.Round(x.valor * 0.19, 2) == x.iva ? 0 : Math.Round(x.valor * 0.04, 2),
+                valor = x.valor,
+                total = 0
+
+            }).ToList<FacturaDetalles>();
+            var totalCalculos = listDetallesFactura.Select(x => new FacturaDetalles
+            {
+                numero = x.numero,
+                nombre = x.nombre,
+                descripcion = x.descripcion,
+                iva = x.iva,
+                imp = x.imp,
+                valor = x.valor,
+                total = Math.Round(x.valor + x.iva + x.imp, 2)
+            }).ToList<FacturaDetalles>();
+
+            var numDetalles = this.listDetallesCargos.Where(x => x.numero_tel.Equals(numero_tel)).FirstOrDefault();
+
+            txt_numCel.Text = numDetalles.numero_tel;
+            txtValorFac.Text = numDetalles.valor.ToString();
+            txtIvaFac.Text = totalCalculos.Sum(x => x.iva).ToString();
+            txtImpFac.Text = totalCalculos.Sum(x => x.imp).ToString();
+            txtTotalFac.Text = numDetalles.total.ToString();
+
+
+            facturaDetallesGrid.DataSource = totalCalculos.Where(x => x.valor > -1).ToList<FacturaDetalles>();
+            facturaDetallesDescuentos.DataSource = totalCalculos.Where(x => x.valor < 0).ToList<FacturaDetalles>();
+        }
+
+        private void txtOtro_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblAlertaOtro.Visible = !double.TryParse(txtOtro.Text, out double n) ? true : false;
+            cuadroGrid.Rows[7].Cells[2].Value = n.ToString();
+
+        }
+
+        private void txtOtro_Click(object sender, EventArgs e)
+        {
+            if (txtIva.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtIva.Text = "";
+                txtIva.ForeColor = Color.Black;
+            }
+        }
+    }
+}

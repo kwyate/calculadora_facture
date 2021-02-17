@@ -1,0 +1,267 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Data.OleDb;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace Calculadora_factura_escritorio
+{
+    public partial class Form1 : Form
+    {
+
+        public Form1()
+        {
+            InitializeComponent();
+            mostrarValores();
+        }
+
+        private OleDbConnection Conexion(string conexionDriver, string nombreArchivo )
+        {
+            try
+            {
+                string conexion = string.Format(conexionDriver, nombreArchivo);
+
+                OleDbConnection conector = new OleDbConnection(conexion);
+
+                return conector;
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine("Hay un error: " + e);
+            }
+
+            return null;
+        }
+        private OleDbCommand queryConsulta(string query, OleDbConnection conector)
+        {
+                OleDbCommand consulta = new OleDbCommand(query, conector);
+            try
+            {
+                return consulta;
+            }catch(Exception e)
+            {
+                Console.WriteLine("Hay un error: " + e);
+            }
+            return null;
+        }
+        public DataTableCollection ImportDataView(string nombreArchivo, string query)
+        {
+            var conector = Conexion("Provider=Microsoft.ACE.OLEDB.12.0; Data Source = {0}; Extended Properties='Excel 12.0 Xml; HDR = YES'", nombreArchivo);
+            conector.Open();
+            var consulta = queryConsulta(query, conector);
+            OleDbDataAdapter adaptador = new OleDbDataAdapter()
+            {
+                SelectCommand = consulta
+            };
+            DataSet ds = new DataSet();
+            adaptador.Fill(ds);
+            conector.Close();
+            return ds.Tables;
+        }
+
+        public double sumValoresColumn(DataTableCollection table, List<string> nombresColumna)
+        {
+            double result = 0;
+            for(int i=0; i<nombresColumna.Count; i++)
+            {
+                foreach (DataRow row in table[0].Rows)
+                {
+                    Console.WriteLine(row[nombresColumna[i]].ToString());
+                    try
+                    {
+                        result += double.Parse(row[nombresColumna[i]].ToString());
+                    }
+                    catch (Exception e)
+                    {
+                        result += 0;
+                    }
+
+                }
+            }
+                return result;
+            
+        }
+
+
+        public DataView ImportarDatos(string nombreArchivo)
+        {
+            string conexion = string.Format("Provider=Microsoft.ACE.OLEDB.12.0; Data Source = {0}; Extended Properties='Excel 12.0 Xml; HDR = YES'", nombreArchivo);
+
+            OleDbConnection conector = new OleDbConnection(conexion);
+
+            conector.Open();
+
+            OleDbCommand consulta = new OleDbCommand("select * from [Hoja1$]", conector);
+
+
+            OleDbDataAdapter adaptador = new OleDbDataAdapter()
+            {
+                SelectCommand = consulta
+            };
+
+            DataSet ds = new DataSet();
+
+            adaptador.Fill(ds);
+            conector.Close();
+
+            return ds.Tables[0].DefaultView;
+
+        }
+        public void activarForm()
+        {
+            txtGastosC.Enabled = true;
+            txtImp.Enabled = true;
+            txtIva.Enabled = true;
+            btnCalcular.Enabled = true;
+        }
+        private void button1_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dialog = new OpenFileDialog()
+            {
+                Filter = "Excel | *.xls;*.xlsx;",
+                Title = "Seleccionar Archivo"
+            };
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                
+                lblFile.Text = dialog.FileName;
+                DataTableCollection table = ImportDataView(
+                    dialog.FileName, 
+                    "SELECT DESCRIPCION, Round(VALOR,2) AS VALOR, Round((VALOR*19)/100, 2) AS IVAPorcentaje, Round((VALOR*4)/100,2) AS ImpPorcentaje, Round((((VALOR*4)/100) + ((VALOR*19)/100)),2) AS TotalImpIva, IVA  FROM [Hoja1$]"
+                    );
+                tableData.DataSource = table[0].DefaultView;
+                tableData.Columns[0].Width = 450;
+                
+                DataTableCollection tableSumTotal = ImportDataView(
+                    dialog.FileName, 
+                    "SELECT  Sum(Round(VALOR,2)) AS VALOR, Sum(Round((VALOR*19)/100, 2)) AS IVAPorcentaje, sum(Round((VALOR*4)/100,2)) AS ImpPorcentaje FROM [Hoja1$]"
+                    );
+                if (cargarValoresCuadro(tableSumTotal))
+                {
+                    activarForm();
+                }
+
+
+            }
+        }
+        private void mostrarValores()
+        {
+                string[] row = new string[] { "Gasto Celular", "0", "0", "0" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "IVA 19%", "0", "0", "0" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "Imp. Consumo 4%", "0", "0", "0" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "Reposición", "0", "", "" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "Otros Servicios y Créditos", "0", "", "" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "Ajuste x Rev de pagos", "0", "", "" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "IVA nuevos equipos", "0", "", "" };
+                cuadroGrid.Rows.Add(row);
+                row = new string[] { "Total", "0", "0", "0" };
+                cuadroGrid.Rows.Add(row);
+        }
+        private bool cargarValoresCuadro(DataTableCollection dt)
+        {
+            try
+            {
+                objCell(0, 1).Value = Math.Round(sumValoresColumn(dt, new List<string> { "VALOR" }), 2).ToString();
+                objCell(1, 1).Value = Math.Round(sumValoresColumn(dt, new List<string> { "IVAPorcentaje" }), 2).ToString();
+                objCell(2, 1).Value = Math.Round(sumValoresColumn(dt, new List<string> { "ImpPorcentaje" }), 2).ToString();
+                objCell(7, 1).Value = Math.Round(sumValoresColumn(dt, new List<string> { "VALOR", "IVAPorcentaje", "ImpPorcentaje" }), 2).ToString();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void TotalIvaImpGrid_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+
+        }
+
+       
+
+        private void txtGastosC_Click_1(object sender, EventArgs e)
+        {
+            if (txtGastosC.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtGastosC.Text = "";
+                txtGastosC.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtIva_Click(object sender, EventArgs e)
+        {
+            if(txtIva.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtIva.Text = "";
+                txtIva.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtImp_Click(object sender, EventArgs e)
+        {
+            if (txtImp.Text.Equals("DIGITE EL VALOR"))
+            {
+                txtImp.Text = "";
+                txtImp.ForeColor = Color.Black;
+            }
+        }
+
+        private void txtGastosC_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblalertGS.Visible = !double.TryParse(txtGastosC.Text, out double n) ? true : false;
+            cuadroGrid.Rows[0].Cells[2].Value = n.ToString();
+            
+        }
+
+        private void txtIva_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblAlertIva.Visible = !double.TryParse(txtIva.Text, out double n) ? true : false;
+            cuadroGrid.Rows[1].Cells[2].Value = n.ToString();
+           
+        }
+
+        private void txtImp_KeyUp(object sender, KeyEventArgs e)
+        {
+            lblAlertImp.Visible = !double.TryParse(txtImp.Text, out double n) ? true : false;
+            cuadroGrid.Rows[2].Cells[2].Value = n.ToString();
+        }
+
+        private void btnCalcular_Click(object sender, EventArgs e)
+        {
+            objCell(7, 2).Value = Math.Round(double.Parse(txtGastosC.Text) + double.Parse(txtIva.Text) + double.Parse(txtImp.Text), 2);
+            calcularDiferencias();
+        }
+
+        private void calcularDiferencias()
+        {
+            //calcular diferencia Gasto Celular = factura_GS -(cuadroGs + CuadroReposicion + cuadroOtrosServicios + CuadroAjustexRev)
+            objCell(0,3).Value = double.Parse(txtGastosC.Text)-( valCell(0,1) + valCell(3,1) + valCell(4,1) +valCell(5,1) );
+            //Calcular diferencia IVA = factura_IVA -(CuadroIva + cuadroIvaNuevosEquipos)
+            objCell(1, 3).Value = double.Parse(txtIva.Text) - (valCell(1, 1) + valCell(6, 1));
+            //Calcular diferencia IMP = factura_Imp - CuadroIMP
+            objCell(2,3).Value = double.Parse(txtImp.Text) - valCell(2, 1);
+            //Calcular total diferencia = la sumatoria de los anteriores calculos
+            objCell(7, 3).Value = valCell(0, 3) + valCell(1, 3) + valCell(2, 3);
+        }
+        private double valCell(int row, int cell)
+        {
+           return double.Parse(objCell(row,cell).Value.ToString());
+        }
+        private DataGridViewCell objCell(int row, int cell)
+        {
+            return cuadroGrid.Rows[row].Cells[cell];
+        }
+    }
+}
